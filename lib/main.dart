@@ -1,49 +1,54 @@
+import 'dart:async';
 import 'dart:typed_data';
-import "dart:ui";
+import "dart:ui" as ui;
 
 import "package:flutter/material.dart";
 import 'package:flutter/services.dart' show rootBundle;
 
 import "package:flutter_nes/flutter_nes.dart";
-import "package:flutter_nes/frame.dart";
 
 void main() {
-  runApp(FicoApp());
+  runApp(const FicoApp());
 }
 
-dynamic createPixel(int x, int y) {
-  const double scale = 2.0;
-  return Offset(x * scale, y * scale) & Size(scale, scale);
+Future<ui.Image> frameToImage(Uint8List frame) {
+  final Completer<ui.Image> _completer = new Completer();
+
+  ui.decodeImageFromPixels(frame, 256, 240, ui.PixelFormat.rgba8888, (image) {
+    _completer.complete(image);
+  });
+
+  return _completer.future;
 }
 
 // paint one frame from nes emulator
-class NesFramePainter extends CustomPainter {
-  NesFramePainter(this._frame);
+class NesImagePainter extends CustomPainter {
+  NesImagePainter(this.image);
 
-  Frame _frame;
+  ui.Image? image;
+  final painter = Paint();
 
   @override
-  void paint(Canvas canvas, Size size) {
-    if (_frame == null) return;
+  void paint(Canvas canvas, Size size) async {
+    if (image == null) return;
 
-    final paint = Paint();
-
-    _frame.forEachPixel((x, y, color) {
-      paint.color = Color(color);
-      canvas.drawRect(createPixel(x, y), paint);
-    });
+    canvas.drawImageRect(
+        image!,
+        Rect.fromLTWH(0, 0, image!.width.toDouble(), image!.height.toDouble()),
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        painter);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
+  bool shouldRepaint(covariant NesImagePainter oldDelegate) {
+    return image != oldDelegate.image;
   }
 }
 
 class NesScreenState extends State {
-  NesEmulator _emulator = NesEmulator();
+  NesEmulator emulator = NesEmulator();
 
-  Frame frame = Frame();
+  ui.Image? image;
 
   @override
   void initState() {
@@ -53,15 +58,16 @@ class NesScreenState extends State {
   }
 
   loadGame() async {
-    final ByteData game =
-        await rootBundle.load('roms/Super_mario_brothers.nes');
+    final ByteData game = await rootBundle.load('roms/Bomber_man.nes');
 
-    _emulator.loadGame(game.buffer.asUint8List());
-    _emulator.powerOn();
+    emulator.loadGame(game.buffer.asUint8List());
+    emulator.powerOn();
 
-    _emulator.on('FrameDone', (newFrame) {
+    emulator.on('FrameDone', (newFrame) async {
+      final ui.Image newImage = await frameToImage(newFrame.pixels);
+
       setState(() {
-        frame = newFrame;
+        image = newImage;
       });
     });
   }
@@ -71,21 +77,25 @@ class NesScreenState extends State {
     return GestureDetector(
       child: Container(
         color: Colors.white,
-        child: CustomPaint(painter: NesFramePainter(frame)),
+        child: CustomPaint(painter: NesImagePainter(image)),
       ),
     );
   }
 }
 
 class NesScreen extends StatefulWidget {
+  const NesScreen({Key? key}) : super(key: key);
+
   @override
   State<StatefulWidget> createState() => NesScreenState();
 }
 
 class FicoApp extends StatelessWidget {
+  const FicoApp({Key? key}) : super(key: key);
+
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return NesScreen();
+    return const NesScreen();
   }
 }
