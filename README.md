@@ -1,5 +1,5 @@
 # Fico
-This is a demo app for running the [flutter_nes](https://github.com/mao0613/flutter_nes)
+This is a demo app for running the [nesbox](https://github.com/tilemoon/nesbox)
 
 ## Getting Started
 ### Development
